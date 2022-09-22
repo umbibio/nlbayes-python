@@ -7,14 +7,14 @@ using logic models of transcriptional regulation
 
 ### Linux (Debian/Ubuntu)
 
-```
-$ sudo apt install -y libgsl-dev
-```
-
-```
-$ pip install -r setup_requirements.txt
+```bash
+sudo apt install -y libgsl-dev
 ```
 
+```bash
+pip install cython cysignals
 ```
-$ pip install git+https://github.com/umbibio/nlbayes-python.git
+
+```bash
+pip install git+https://github.com/umbibio/nlbayes-python.git
 ```
