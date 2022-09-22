@@ -1,0 +1,8 @@
+cython
+cysignals
+numpy
+pandas
+scipy
+psutil
+tqdm
+git+https://github.com/twiecki/CythonGSL.git

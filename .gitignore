@@ -1,0 +1,13 @@
+build
+dist
+*.c
+*.egg-info
+nlbayes/*.cpp
+nlbayes/*.so
+*.json
+*.p
+*.csv
+*.csv.gz
+*.zip
+__pycache__
+*~*
