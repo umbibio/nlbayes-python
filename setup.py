@@ -54,7 +54,7 @@ setup(
         'using logic models of transcriptional regulation'),
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url='https://github.com/umbibio/nlbayes',
+    url='https://github.com/umbibio/nlbayes-python',
     packages=setuptools.find_packages(),
     license='MIT',
     classifiers=[
