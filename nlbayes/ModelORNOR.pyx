@@ -178,8 +178,9 @@ cdef class PyModelORNOR:
 
         converged = gr <= gr_level
 
-        if converged and not quiet:
-            print("Converged after", self.c_model.total_sampled, "samples")
+        if converged:
+            if not quiet:
+                print("Converged after", self.c_model.total_sampled, "samples")
 
         elif status == 0:
             status = 1
