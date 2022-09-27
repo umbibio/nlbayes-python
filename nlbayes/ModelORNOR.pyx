@@ -143,9 +143,10 @@ cdef class PyModelORNOR:
                 pprint(x)
 
 
-    def sample_n(self, N, dN, gr_level, show_progress=True):
+    def sample_n(self, N, dN, gr_level, show_progress=True, quiet=False):
 
-        print()
+        if not quiet:
+            print()
         gr = float('inf')
 
         status = 0
@@ -177,19 +178,22 @@ cdef class PyModelORNOR:
 
         converged = gr <= gr_level
 
-        if converged:
+        if converged and not quiet:
             print("Converged after", self.c_model.total_sampled, "samples")
 
         elif status == 0:
             status = 1
-            print("Drawed", self.c_model.total_sampled, "samples so far")
+            if not quiet:
+                print("Drawed", self.c_model.total_sampled, "samples so far")
 
         elif status == -1:
-            print("\nProcess interrupted.")
-            print("Drawed", self.c_model.total_sampled, "samples so far")
+            if not quiet:
+                print("\nProcess interrupted.")
+                print("Drawed", self.c_model.total_sampled, "samples so far")
 
-        print("Max Gelman-Rubin statistic is", gr, "(target",
-              "was" if converged else "is", gr_level,")")
+        if not quiet:
+            print("Max Gelman-Rubin statistic is", gr, "(target",
+                  "was" if converged else "is", gr_level,")")
 
         return status
 
