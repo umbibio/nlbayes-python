@@ -104,12 +104,12 @@ cdef class PyModelORNOR:
     def get_max_gelman_rubin(self):
         return self.c_model.get_max_gelman_rubin()
 
-    def sample_posterior(self, N, gr_level, burnin=False):
+    def sample_posterior(self, N, gr_level, burnin=False, show_progress=True):
         if burnin:
             print("\nInitializing model burn-in ...")
             converged = False
             while not converged:
-                status = self.sample_n(200, 20, 5.0)
+                status = self.sample_n(200, 20, 5.0, show_progress)
                 converged = status == 0
                 if (status == -1):
                     print("Interrupt signal received")
@@ -123,7 +123,7 @@ cdef class PyModelORNOR:
         i = 1
         while n_sampled < N and not converged:
             n = min(200 * i, N - n_sampled)
-            status = self.sample_n(n, 5, gr_level)
+            status = self.sample_n(n, 5, gr_level, show_progress)
             converged = status == 0
             n_sampled = n_sampled + n
             i = i + 1
@@ -143,8 +143,7 @@ cdef class PyModelORNOR:
                 pprint(x)
 
 
-
-    def sample_n(self, N, dN, gr_level):
+    def sample_n(self, N, dN, gr_level, show_progress=True):
 
         print()
         gr = float('inf')
@@ -152,9 +151,11 @@ cdef class PyModelORNOR:
         status = 0
         n = 0
         try:
-            progress = tqdm(total=N)
+            if show_progress:
+                progress = tqdm(total=N)
             while n < N and gr > gr_level:
-                progress.update(dN)
+                if show_progress:
+                    progress.update(dN)
                 dN = min(dN, N-n)
 
                 sig_on()
@@ -164,13 +165,15 @@ cdef class PyModelORNOR:
                 n += dN
                 gr = self.c_model.get_max_gelman_rubin()
 
-            progress.total = n
-            progress.update(0)
+            if show_progress:
+                progress.total = n
+                progress.update(0)
 
         except KeyboardInterrupt:
             status = -1
         finally:
-            progress.close()
+            if show_progress:
+                progress.close()
 
         converged = gr <= gr_level
 
