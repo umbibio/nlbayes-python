@@ -7,7 +7,8 @@ from scipy.stats import fisher_exact
 
 
 
-def gen_network(NX: int, NY: int, AvgNTF: float=20) -> dict:
+def gen_network(NX: int, NY: int, AvgNTF: float=20, p_up: float=0.65, p_dw: float=0.35) -> dict:
+    assert p_up + p_dw <= 1.
     r = 1.8
 
     p = NX/NY*r/AvgNTF
@@ -23,7 +24,7 @@ def gen_network(NX: int, NY: int, AvgNTF: float=20) -> dict:
         js = np.sort(np.random.choice(NY, size=n_edges[i], replace=False))
         trgs = [f"Gene{j+1:05d}" for j in js]
 
-        mors = np.random.choice([-1, 0, 1], p=[0.35, 0., 0.65], size=len(trgs))
+        mors = np.random.choice([-1, 0, 1], p=[p_dw, 1. - (p_up + p_dw), p_up], size=len(trgs))
 
         network[src] = dict(zip(trgs, mors))
 

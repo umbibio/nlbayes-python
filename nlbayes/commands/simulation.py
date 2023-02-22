@@ -1,4 +1,6 @@
 import os
+import json
+from hashlib import sha256
 import argparse
 import numpy as np
 import pandas as pd
@@ -7,10 +9,10 @@ import nlbayes
 from nlbayes.utils import gen_evidence, gen_network, get_ents_rels_dfs, get_evidence_dict, get_network_dict, get_tests_from_dicts
 
 
-def make_network(NX, NY, AvgNTF, seed):
+def make_network(NX, NY, AvgNTF, p_up, p_dw, seed):
 
     np.random.seed(seed)
-    network = gen_network(NX=NX, NY=NY, AvgNTF=AvgNTF)
+    network = gen_network(NX=NX, NY=NY, AvgNTF=AvgNTF, p_up=p_up, p_dw=p_dw)
     np.random.seed()
     
     return network
@@ -125,13 +127,13 @@ def reduce_problem_size(ents, rels, evid, tests, thr):
 
 
 def simulation(
-        net_seed, net_n_tfs, net_n_genes, net_avg_n_tfs, net_rnd_p,
+        net_seed, net_n_tfs, net_n_genes, net_avg_n_tfs, net_p_up, net_p_dw, net_rnd_p,
         net_rnd_mor_p, net_rmv_sgn_p, net_flp_sgn_p,
         evd_seed, evd_n_active_tfs, evd_active_tf_uids, evd_background_p,
         evd_mor_noise_p, evd_fraction_targets, evd_rnd_p,
         z0, z1, t_alpha, t_beta, s_leniency, n_graphs, combined_test_th):
 
-    network = make_network(net_n_tfs, net_n_genes, net_avg_n_tfs, net_seed)
+    network = make_network(net_n_tfs, net_n_genes, net_avg_n_tfs, net_p_up, net_p_dw, net_seed)
     evid, tests = make_evidence(network, evd_n_active_tfs, evd_active_tf_uids,
                                 evd_background_p, evd_mor_noise_p,
                                 evd_fraction_targets, evd_seed)
@@ -201,7 +203,7 @@ def compute_confusion_matrix(r, thr=0.5):
 
 def analyze_result(rels, evid, result):
     out = []
-    for thr in np.linspace(0., 1., 101):
+    for thr in np.linspace(0., 1., 201):
         try:
             data = compute_explained_evidence(rels, evid, result, thr=thr)
             prcnt_expl_ornor = data['prcnt_expl_ornor']
@@ -210,10 +212,40 @@ def analyze_result(rels, evid, result):
             prcnt_expl_ornor = float('nan')
             prcnt_expl_sum = float('nan')
         TP, FP, TN, FN = compute_confusion_matrix(result, thr=thr)
-        out.append((thr, TP, FP, TN, FN, prcnt_expl_ornor, prcnt_expl_sum))
-    df = pd.DataFrame(out, columns=['thr', 'TP', 'FP', 'TN', 'FN', 'prcnt_expl_ornor', 'prcnt_expl_sum'])
+
+        # recall or true positive rate (TPR)
+        TPR = TP
+        if (TP + FN) > 0:
+            TPR /= (TP + FN)
+
+        # fall-out or false positive rate (FPR)
+        FPR = FP
+        if (FP + TN) > 0:
+            FPR /= (FP + TN)
+
+        # precision or positive predictive value (PPV)
+        PPV = TP
+        if (TP + FP) > 0:
+            PPV /= (TP + FP)
+
+        out.append((thr, TP, FP, TN, FN, TPR, FPR, PPV, prcnt_expl_ornor, prcnt_expl_sum))
+    df = pd.DataFrame(out, columns=['thr', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'PPV', 'prcnt_expl_ornor', 'prcnt_expl_sum'])
 
     return df
+
+
+def make_hash(o):
+    return sha256(repr(make_hashable(o)).encode()).hexdigest()
+
+
+def make_hashable(o):
+    if isinstance(o, (tuple, list)):
+        return tuple((make_hashable(e) for e in o))
+    if isinstance(o, dict):
+        return tuple(sorted((k,make_hashable(v)) for k,v in o.items()))
+    if isinstance(o, (set, frozenset)):
+        return tuple(sorted(make_hashable(e) for e in o))
+    return o
 
 
 def main():
@@ -227,6 +259,8 @@ def main():
     parser.add_argument('--net_n_tfs', type=int, default=250)
     parser.add_argument('--net_n_genes', type=int, default=5000)
     parser.add_argument('--net_avg_n_tfs', type=float, default=6.66)
+    parser.add_argument('--net_p_up', type=float, default=0.65)
+    parser.add_argument('--net_p_dw', type=float, default=0.35)
     parser.add_argument('--net_rnd_p', type=float, default=0.)
     parser.add_argument('--net_rnd_mor_p', type=float, default=0.)
     parser.add_argument('--net_rmv_sgn_p', type=float, default=0.)
@@ -240,10 +274,10 @@ def main():
     parser.add_argument('--evd_fraction_targets', type=float, default=0.1)
     parser.add_argument('--evd_rnd_p', type=float, default=0.)
 
-    parser.add_argument('--z0', type=float, default=0.01)
+    parser.add_argument('--z0', type=float, default=0.)
     parser.add_argument('--z1', type=float, default=0.99)
-    parser.add_argument('--t_alpha', type=float, default=1.)
-    parser.add_argument('--t_beta', type=float, default=1.)
+    parser.add_argument('--t_alpha', type=float, default=2.)
+    parser.add_argument('--t_beta', type=float, default=2.)
     parser.add_argument('--s_leniency', type=float, default=0.1)
 
     parser.add_argument('--n_graphs', type=int, default=3)
@@ -266,34 +300,48 @@ def main():
         net_seeds = [kvargs['net_seed']]
         evd_seeds = [kvargs['evd_seed']]
 
+    experiment_hash = sha256(json.dumps(kvargs, sort_keys=True).encode()).hexdigest()
+    
     if out_filename:
-        filename_template = f'evaluation___{{net_seed:05d}}_{{evd_seed:05d}}_{out_filename}'
+        filepath_template = os.path.join(outdir_path, out_filename, '{net_seed:05d}_{evd_seed:05d}___evaluation.csv')
+        meta_filepath = os.path.join(outdir_path, out_filename, 'metadata.json')
     else:
-        filename_template = (
-            'evaluation___{net_seed:05d}_{evd_seed:05d}'
-            '___{net_n_tfs:04d}_{net_n_genes:05d}_{net_avg_n_tfs:06.2f}_{net_rnd_p:.2f}_{net_rnd_mor_p:.2f}_{net_rmv_sgn_p:.2f}_{net_flp_sgn_p:.2f}'
-            '___{evd_n_active_tfs:02d}_{evd_active_tf_uids:X<40}_{evd_background_p:.2f}_{evd_mor_noise_p:.2f}_{evd_fraction_targets:.2f}_{evd_rnd_p:.2f}'
-            '___{z0:.4f}_{z1:.4f}_{t_alpha:07.2f}_{t_beta:07.2f}_{s_leniency:.2f}'
-            '.csv.gz'
-        )
-        
-    filepath_template = os.path.join(outdir_path, filename_template)
+        filepath_template = os.path.join(outdir_path, experiment_hash, '{net_seed:05d}_{evd_seed:05d}___evaluation.csv')
+        meta_filepath = os.path.join(outdir_path, experiment_hash, 'metadata.json')
+
+    os.makedirs(os.path.dirname(meta_filepath), exist_ok=True)
+
+    params_str = json.dumps({**kvargs, 'experiment_hash':experiment_hash}, indent=4)
+    print(params_str)
+
+    with open(meta_filepath, 'w') as file:
+        json.dump({**kvargs, 'experiment_hash':experiment_hash}, file, indent=4)
+
     for net_seed, evd_seed in zip(net_seeds, evd_seeds):
         kvargs['net_seed'] = net_seed
         kvargs['evd_seed'] = evd_seed
 
-        filepath = filepath_template.format(**kvargs).replace(',', 'x')
+        filepath = filepath_template.format(**kvargs)
         if os.path.exists(filepath):
             continue
 
+        with open(filepath, 'w'):
+            pass
+
         try:
-            ents, rels, evid, result = simulation(**kvargs, combined_test_th=1.)
+            # for these simulations we don't trim the network. We use the full problem structure
+            combined_test_th = 1.
+            ents, rels, evid, result = simulation(**kvargs, combined_test_th=combined_test_th)
         except RuntimeError:
+            os.remove(filepath)
             continue
 
         df = analyze_result(rels, evid, result)
         df.to_csv(filepath, index=False)
-
+        result.to_csv(filepath.replace('___evaluation.', '___result.'), index=False)
+        ents.to_csv(filepath.replace('___evaluation.csv', '___ents.csv.gz'), index=False)
+        rels.to_csv(filepath.replace('___evaluation.csv', '___rels.csv.gz'), index=False)
+        evid.to_csv(filepath.replace('___evaluation.csv', '___evid.csv.gz'), index=False)
 
 
 if __name__ == '__main__':
