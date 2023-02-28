@@ -8,6 +8,8 @@ nlbayes/*.so
 *.p
 *.csv
 *.csv.gz
+*.tsv
+*.tsv.gz
 *.zip
 __pycache__
 *~*
