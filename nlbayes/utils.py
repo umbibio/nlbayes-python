@@ -1,18 +1,39 @@
 
 from typing import Tuple
+import json
 import numpy as np
 import pandas as pd
 from itertools import chain
 from scipy.stats import fisher_exact
 
+from numpy.random import MT19937, RandomState, SeedSequence
 
 
-def gen_network(NX: int, NY: int, AvgNTF: float=20, p_up: float=0.65, p_dw: float=0.35) -> dict:
+
+def ORNOR_inference(network, evidence):
+
+    if isinstance(network, pd.DataFrame):
+        network = get_network_dict(network)
+    
+    if isinstance(evidence, pd.DataFrame):
+        evidence = get_evidence_dict(evidence)
+        
+    return
+
+
+def read_network_json(filepath: str) -> dict:
+    with open(filepath) as file:
+        network = json.load(file)
+    return network
+
+def gen_network(NX: int, NY: int, AvgNTF: float=20,
+                p_up: float=0.65, p_dw: float=0.35, rng=np.random) -> dict:
+
     assert p_up + p_dw <= 1.
     r = 1.8
 
     p = NX/NY*r/AvgNTF
-    n_edges = np.random.negative_binomial( r, p, size=NX)
+    n_edges = rng.negative_binomial( r, p, size=NX)
     n_edges = np.minimum(NY, n_edges)
     n_edges = np.maximum(3, n_edges)
     n_edges = np.sort(n_edges)[::-1]
@@ -21,10 +42,10 @@ def gen_network(NX: int, NY: int, AvgNTF: float=20, p_up: float=0.65, p_dw: floa
     for i in range(NX):
         src = f"TF{i+1:03d}"
 
-        js = np.sort(np.random.choice(NY, size=n_edges[i], replace=False))
+        js = np.sort(rng.choice(NY, size=n_edges[i], replace=False))
         trgs = [f"Gene{j+1:05d}" for j in js]
 
-        mors = np.random.choice([-1, 0, 1], p=[p_dw, 1. - (p_up + p_dw), p_up], size=len(trgs))
+        mors = rng.choice([-1, 0, 1], p=[p_dw, 1. - (p_up + p_dw), p_up], size=len(trgs)).tolist()
 
         network[src] = dict(zip(trgs, mors))
 
@@ -33,23 +54,26 @@ def gen_network(NX: int, NY: int, AvgNTF: float=20, p_up: float=0.65, p_dw: floa
 
 def gen_evidence(network: dict, n_active_tfs: int=1, active_tfs: list=[],
                  background_p: float=0.02, mor_noise_p: float=0.05,
-                 tf_target_fraction: float=0.1, mor_weights: tuple=(1, 1),
-                 ) -> dict:
+                 tf_target_fraction: float=0.1, mor_weights: tuple=(1, 1), 
+                 return_active_tfs: bool=False,
+                 rng = np.random) -> dict:
 
     tfs = list(network.keys())
     genes = list(set(chain(*[d.keys() for d in network.values()])))
     tfs.sort()
     genes.sort()
 
+    n_active_tfs = max(n_active_tfs, len(active_tfs))
+
     ### Select random TF as active
     n = n_active_tfs - len(active_tfs)
     candidates = [src for src in tfs if src not in active_tfs]
     if n > 0:
-        active_tfs.extend(np.random.choice(candidates, n, False))
+        active_tfs.extend(rng.choice(candidates, n, False))
 
     ### Generate a random deg background
     p = 1 - background_p
-    vals = np.random.choice([-1, 0, 1], len(genes), p=[(1-p)/2, p, (1-p)/2])
+    vals = rng.choice([-1, 0, 1], len(genes), p=[(1-p)/2, p, (1-p)/2])
     evidence = dict(zip(genes, vals))
 
     ### We will randomize the actual sign of expression for each target
@@ -65,12 +89,12 @@ def gen_evidence(network: dict, n_active_tfs: int=1, active_tfs: list=[],
     ### Chance that sign of expression matches the sign of regulation is given by probs
     for act_src_uid in active_tfs:
         trgs = list(network[act_src_uid].keys())
-        de_trgs = np.random.choice(trgs,
+        de_trgs = rng.choice(trgs,
                                    size=int(len(trgs)*tf_target_fraction),
                                    replace=False)
         for trg in de_trgs:
             mor = network[act_src_uid][trg]
-            evidence[trg] += np.random.choice([-dw_step, 0, up_step],
+            evidence[trg] += rng.choice([-dw_step, 0, up_step],
                                               p=probs[mor+1])
     evidence = {k:np.sign(v) for k, v in evidence.items() if v != 0}
     
@@ -81,6 +105,9 @@ def gen_evidence(network: dict, n_active_tfs: int=1, active_tfs: list=[],
     ndegs = len(evidence)
     nrels = sum([len(d) for d in network.values()])
     print(f"{ngtac=}, {ndegs=}, {nrels=}")
+
+    if return_active_tfs:
+        return evidence, active_tfs
 
     return evidence
 
@@ -118,15 +145,162 @@ def get_evid_df(evidence: dict) -> pd.DataFrame:
     return e
 
 
-def get_network_dict(rels: pd.DataFrame, src_colname: str='srcuid', trg_colname: str='trguid', mor_colname: str='type') -> dict:
-    dff = rels.set_index([src_colname, trg_colname])
-    dff = dff.groupby(level=0).apply(lambda df: df.xs(df.name)[mor_colname].to_dict())
+# def get_network_dict(rels: pd.DataFrame, src_colname: str='srcuid', trg_colname: str='trguid', mor_colname: str='type') -> dict:
+#     dff = rels.set_index([src_colname, trg_colname])
+#     dff = dff.groupby(level=0).apply(lambda df: df.xs(df.name)[mor_colname].to_dict())
+#     return dff.to_dict()
+
+
+def get_network_dict(network: pd.DataFrame, src_colname: str='', trg_colname: str='', mor_colname: str='') -> dict:
+
+    # clean up the names of the columns to try to match with possible roles.
+    # We convert to lowercase and use string translation to remove uninformative
+    # characters 
+    t = str.maketrans('', '', '.-_ ')
+    smpl_cols = [c.lower().translate(t) for c in network.columns]
+
+    # possible matches for each role. The order matters, we select the the first
+    # match of the list
+    tst_collection = {
+        'src': ['src', 'tf', 'factor'],
+        'trg': ['trg', 'target', 'gene'],
+        'mor': ['mor', 'type', 'sign', 'reg', 'sgn'],
+    }
+
+    gcn = {}
+    if src_colname:
+        assert src_colname in network.columns
+        gcn['src'] = src_colname
+    if trg_colname:
+        assert trg_colname in network.columns
+        gcn['trg'] = trg_colname
+    if mor_colname:
+        assert mor_colname in network.columns
+        gcn['mor'] = mor_colname
+
+    missing_columns = []
+    for role in tst_collection.keys():
+        if role in gcn.keys():
+            continue
+
+        # we run each test in order. If we find a match, both loops get broken
+        # if no match, the inner loop is complete and we go to the next test
+        for tst in tst_collection[role]:
+            for scol, col in zip(smpl_cols, network.columns):
+                if tst in scol:
+                    gcn[role] = col
+                    print(f"Using column `{col}` as {role}")
+                    break
+            else:
+                continue
+            break
+        else:
+            missing_columns.append(f"'{role}'")
+            print(f"Error: failed to guess columns for '{role}'")
+
+    if missing_columns:
+        message = 'Error: missing ' 
+        message += 'column ' if len(missing_columns) == 1 else 'columns '
+        message += ', '.join(missing_columns)
+        raise ValueError(message)
+
+    network = network.loc[:, [gcn['src'], gcn['trg'], gcn['mor']]]
+    network = network.dropna()
+    network[gcn['src']] = network[gcn['src']].astype(str)
+    network[gcn['trg']] = network[gcn['trg']].astype(str)
+    network[gcn['mor']] = network[gcn['mor']].apply(np.sign).astype(int)
+
+    dff = network.set_index([gcn['src'], gcn['trg']])
+    dff = dff.groupby(level=0).apply(lambda df: df.xs(df.name)[gcn['mor']].to_dict())
     return dff.to_dict()
 
 
-def get_evidence_dict(evid: pd.DataFrame, uid_colname: str='uid', deg_colname: str='val') -> dict:
-    dff = evid.loc[evid[deg_colname]!=0].set_index(uid_colname)
-    return dff[deg_colname].to_dict()
+# def get_evidence_dict(evid: pd.DataFrame, uid_colname: str='uid', deg_colname: str='val') -> dict:
+#     dff = evid.loc[evid[deg_colname]!=0].set_index(uid_colname)
+#     return dff[deg_colname].to_dict()
+
+
+def get_evidence_dict(evidence: pd.DataFrame, logfc_threshold: float=0.585, pval_threshold: float=0.05,
+                      gene_colname: str='', pval_colname: str='', logfc_colname: str='',
+                      network: dict={}) -> dict:
+
+    evidence = evidence.copy()
+    genes_in_network = set([g for r in network.values() for g in r.keys()])
+
+    # clean up the names of the columns to try to match with possible roles.
+    # We convert to lowercase and use string translation to remove uninformative
+    # characters 
+    t = str.maketrans('', '', '.-_ ')
+    smpl_cols = [c.lower().translate(t) for c in evidence.columns]
+
+    # possible matches for each role. The order matters, we select the the first
+    # match of the list
+    tst_collection = {
+        'gene': ['geneid', 'ncbi', 'entrez', 'ensembl', 'symbol', 'gene', 'name', 'uid'],
+        'pval': ['adj', 'pval', 'p-val'],
+        'logfc': ['log2fc', 'logfc', 'foldchange', 'val'],
+    }
+
+    gcn = {}
+    if gene_colname:
+        assert gene_colname in evidence.columns
+        gcn['gene'] = gene_colname
+    if pval_colname:
+        assert pval_colname in evidence.columns
+        gcn['pval'] = pval_colname
+    if logfc_colname:
+        assert logfc_colname in evidence.columns
+        gcn['logfc'] = logfc_colname
+
+
+    missing_columns = []
+    for role in tst_collection.keys():
+        if role in gcn.keys():
+            continue
+
+        # we run each test in order. If we find a match, both loops get broken
+        # if no match, the inner loop is complete and we go to the next test
+        for tst in tst_collection[role]:
+            for scol, col in zip(smpl_cols, evidence.columns):
+                if tst in scol:
+                    gcn[role] = col
+                    print(f"Using column `{col}` as {role}")
+                    break
+            else:
+                continue
+            break
+        else:
+            if role == 'pval':
+                print(f"Warning: failed to guess columns for 'pval'. Assuming pval == 0.")
+                gcn['pval'] = 'pval'
+                evidence['pval'] = 0.
+            else:
+                print(f"Error: failed to guess columns for '{role}'")
+                missing_columns.append(f"'{role}'")
+
+    if missing_columns:
+        message = 'Error: missing ' 
+        message += 'column ' if len(missing_columns) == 1 else 'columns '
+        message += ', '.join(missing_columns)
+        raise ValueError(message)
+
+    evidence = evidence.loc[:, [gcn['gene'], gcn['pval'], gcn['logfc']]]
+    evidence.columns = ['gene', 'pval', 'logfc']
+    evidence = evidence.dropna()
+
+    evidence['gene'] = evidence['gene'].astype(str)
+    evidence['pval'] = evidence['pval'].astype(float)
+    evidence['logfc'] = evidence['logfc'].astype(float)
+
+    evidence['deg'] = evidence['logfc'].apply(np.sign).astype(int)
+
+    evidence = evidence.query('pval <= @pval_threshold')
+    evidence = evidence.query('logfc <= -@logfc_threshold or logfc >= @logfc_threshold')
+
+    if genes_in_network:
+        evidence = evidence.query('gene in @genes_in_network')
+
+    return evidence.set_index('gene')['deg'].to_dict()
 
 
 def get_tests_from_dicts(
