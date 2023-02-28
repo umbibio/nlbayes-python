@@ -70,7 +70,9 @@ setup(
     entry_points = {
         'console_scripts': [
             'nlb-ornor-inference=nlbayes.commands.ornor_inference:main',
+            'nlb-inference=nlbayes.commands.ornor_inference:main',
             'nlb-simulation=nlbayes.commands.simulation:main',
+            'nlb-generate-data=nlbayes.commands.generate_data:main',
         ],
     },
     cmdclass = {'build_ext': build_ext},
