@@ -5,15 +5,16 @@ import argparse
 import numpy as np
 import pandas as pd
 
+from numpy.random import MT19937, RandomState, SeedSequence
+
 import nlbayes
 from nlbayes.utils import gen_evidence, gen_network, get_ents_rels_dfs, get_evidence_dict, get_network_dict, get_tests_from_dicts
 
 
 def make_network(NX, NY, AvgNTF, p_up, p_dw, seed):
 
-    np.random.seed(seed)
-    network = gen_network(NX=NX, NY=NY, AvgNTF=AvgNTF, p_up=p_up, p_dw=p_dw)
-    np.random.seed()
+    rng = RandomState(MT19937(SeedSequence(seed)))
+    network = gen_network(NX=NX, NY=NY, AvgNTF=AvgNTF, p_up=p_up, p_dw=p_dw, rng=rng)
     
     return network
 
@@ -23,13 +24,14 @@ def make_evidence(network, n_active_tfs, active_tfs_str, background_p, mor_noise
     active_tfs = active_tfs_str.split()
     candidates = [src for src in network.keys() if src not in active_tfs]
 
-    np.random.seed(seed)
+    rng = RandomState(MT19937(SeedSequence(seed)))
+
     for _ in range(50):
         ### Select random TF as active
         active_tfs = active_tfs_str.split()
         n = n_active_tfs - len(active_tfs)
         if n > 0:
-            active_tfs.extend(np.random.choice(candidates, n, False))
+            active_tfs.extend(rng.choice(candidates, n, False))
 
         evidence = gen_evidence(
             network,
@@ -38,13 +40,13 @@ def make_evidence(network, n_active_tfs, active_tfs_str, background_p, mor_noise
             background_p=background_p,
             mor_noise_p=mor_noise_p,
             tf_target_fraction=tf_target_fraction,
+            rng=rng,
         )
         if len(evidence) >= 5:
             break
     else:
         raise RuntimeError('Unable to find tf with non-zero differential expression')
-    np.random.seed()
-
+    
     evid, tests = get_tests_from_dicts(network, evidence, active_tfs)
 
     return evid, tests.reset_index()
