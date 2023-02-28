@@ -15,12 +15,12 @@ cdef class PyModelORNOR:
     cdef ModelORNOR *c_model  # Hold a C++ instance which we're wrapping
 
     def __cinit__(self, network, evidence = dict(), set active_tf_set = set(),
-                  uniform_t = True, t_alpha = None, t_beta = None,
+                  uniform_t = False, t_alpha = None, t_beta = None,
                   zy = 0., zn = 0.,
                   s_leniency = 0.1,
                   n_graphs = 3, verbosity = 0):
 
-        zy_value = 1. if zy == 0. else zy
+        zy_value = 0.99 if zy == 0. else zy
 
         if len(evidence) > 0 and zn == 0.:
             n_edges = sum(len(d) for d in network.values())
@@ -78,9 +78,14 @@ cdef class PyModelORNOR:
                 network_edge = src_trg, mor
                 network_c.push_back(network_edge)
 
+        # determine which genes are present in the regulatory network
+        genes_in_network = set([g for r in network.values() for g in r.keys()])
+
         cdef evidence_dict_t evidence_c = evidence_dict_t()
         for trg_uid, trg_de in evidence.items():
-            evidence_c.insert((str(trg_uid).encode('utf8'), trg_de))
+            if trg_uid in genes_in_network:
+                # only add data for genes present in network
+                evidence_c.insert((str(trg_uid).encode('utf8'), trg_de))
 
         cdef prior_active_tf_set_t active_tf_set_c = prior_active_tf_set_t()
         for src_uid in active_tf_set:
@@ -297,6 +302,24 @@ cdef class PyModelORNOR:
         df = pd.merge(*dff_list, left_index=True, right_index=True, suffixes=['_mean', '_sdev'])
 
         return df.reset_index()
+    
+    def inference_posterior(self):
+        return { 'X': self.get_posterior_mean_stat('X', 1),
+                 'T': self.get_posterior_mean_stat('T', 0), }
+
+    def inference_posterior_df(self, annotation={}):
+        posterior = self.inference_posterior()
+        
+        posterior_df = pd.DataFrame(posterior).sort_values('X', ascending=False).reset_index()
+        posterior_df.columns = ['TF_id', 'X', 'T']
+        
+        if len(set(posterior_df['TF_id']).intersection(annotation.keys())) > 0:
+            posterior_df['symbol'] = posterior_df['TF_id'].map(annotation)
+            posterior_df = posterior_df.iloc[:, [0, 3, 1, 2]]
+        
+        posterior_df.index += 1
+        posterior_df.index.name = 'rank'
+        return posterior_df
 
     def get_posterior_mean_stat(self, var_name, stat):
         A = np.array(self.get_posterior_means(var_name))
