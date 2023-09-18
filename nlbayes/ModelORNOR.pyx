@@ -6,8 +6,7 @@ from nlbayes.ModelORNOR cimport *
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from cysignals.signals cimport sig_check
-from cysignals.signals cimport sig_on, sig_off
+from cpython.exc cimport PyErr_CheckSignals
 from pprint import pprint
 
 
@@ -164,12 +163,10 @@ cdef class PyModelORNOR:
                     progress.update(dN)
                 dN = min(dN, N-n)
 
-                sig_on()
                 self.c_model.sample_n(dN)
-                sig_off()
-
                 n += dN
                 gr = self.c_model.get_max_gelman_rubin()
+                PyErr_CheckSignals()
 
             if show_progress:
                 progress.total = n

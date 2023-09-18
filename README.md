@@ -16,7 +16,7 @@ sudo apt install -y libgsl-dev
 ```
 
 ```bash
-pip install cython cysignals
+pip install cython
 ```
 
 ```bash

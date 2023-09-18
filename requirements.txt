@@ -1,5 +1,4 @@
 cython
-cysignals
 numpy
 pandas
 scipy

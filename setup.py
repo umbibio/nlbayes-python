@@ -79,11 +79,9 @@ setup(
     ext_modules = cythonize(extensions, annotate=False, language_level=3),
     setup_requires=[
         'cython',
-        'cysignals',
     ],
     install_requires=[
         'cython',
-        'cysignals',
         'numpy',
         'pandas',
         'scipy',
