@@ -85,6 +85,9 @@ def randomize_network(ents: pd.DataFrame, rels: pd.DataFrame, p: float) -> pd.Da
 
 
 def randomize_evidence(evid: pd.DataFrame, p: float) -> pd.DataFrame:
+
+    evid = evid.copy()
+
     n_genes = len(evid)
     n_upreg = (evid.val > 0).sum()
     n_dwreg = (evid.val < 0).sum()
@@ -100,9 +103,7 @@ def randomize_evidence(evid: pd.DataFrame, p: float) -> pd.DataFrame:
     return evid
 
 
-def run_model(ents, rels, evid, tests, z0, z1, t_alpha, t_beta, s_leniency, n_graphs, combined_test_th):
-
-    ents, rels, evid, tests = reduce_problem_size(ents, rels, evid, tests, thr=combined_test_th)
+def run_model(rels, evid, tests, z0, z1, t_alpha, t_beta, s_leniency, n_graphs):
 
     network = get_network_dict(rels)
     evidence =  get_evidence_dict(evid)
@@ -151,9 +152,8 @@ def simulation(
     ents, rels, evid, tests = \
         reduce_problem_size(ents, rels, evid, tests, thr=combined_test_th)
 
-    result = run_model(ents, rels, evid, tests,
-                       z0, z1, t_alpha, t_beta, s_leniency, n_graphs,
-                       combined_test_th)
+    result = run_model(rels, evid, tests,
+                       z0, z1, t_alpha, t_beta, s_leniency, n_graphs)
 
     return ents, rels, evid, result
 
