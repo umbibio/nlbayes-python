@@ -76,6 +76,9 @@ def randomize_mor(rels: pd.DataFrame, p: float) -> pd.DataFrame:
 
 
 def randomize_network(ents: pd.DataFrame, rels: pd.DataFrame, p: float) -> pd.DataFrame:
+
+    rels = rels.copy()
+
     mask = np.random.choice([False, True], p=[1-p, p], size=len(rels))
     n = mask.sum()
     choices = ents.loc[ents.type == 'mRNA'].uid.values
@@ -99,6 +102,8 @@ def randomize_evidence(evid: pd.DataFrame, p: float) -> pd.DataFrame:
     mask = np.random.choice([False, True], p=[1-p, p], size=n_genes)
     n = mask.sum()
     evid.loc[mask, 'val'] = np.random.choice([-1, 0, 1], p=[dw_p, no_p, up_p], size=n)
+    evid['foldchange'] = evid['val'].astype(float)
+    evid['pvalue'] = (evid['val'] == 0).astype(float)
 
     return evid
 
