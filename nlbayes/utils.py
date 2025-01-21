@@ -1,4 +1,3 @@
-
 from typing import Tuple
 import json
 import numpy as np
@@ -375,4 +374,3 @@ def get_tests(evid, rels, gt_act_src_uids=[]):
     df['gt_act'] = df.index.isin(gt_act_src_uids)
 
     return df
-

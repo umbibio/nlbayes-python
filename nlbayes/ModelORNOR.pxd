@@ -18,7 +18,7 @@ ctypedef std_vector[std_pair[std_string, double]] gelman_rubin_vector_t
 
 
 # Declare the class with cdef
-cdef extern from "../libnlbayes/include/ModelORNOR.h" namespace "nlb":
+cdef extern from "../core/include/ModelORNOR.h" namespace "nlb":
 
     cdef cppclass ModelORNOR:
         network_t network
