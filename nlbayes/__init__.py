@@ -1,5 +1,8 @@
-from .ModelORNOR import PyModelORNOR as ModelORNOR
+"""nlbayes - Bayesian Networks for TF Activity Inference"""
 
-__all__ = ["ModelORNOR"]
+from .ornor import ORNOR
+from .ModelORNOR import PyModelORNOR as ModelORNOR  # Keep for backward compatibility
+
+__all__ = ["ModelORNOR", "ORNOR"]
 
 __version__ = "0.7.4"
