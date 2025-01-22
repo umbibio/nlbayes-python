@@ -5,4 +5,4 @@ from .ModelORNOR import PyModelORNOR as ModelORNOR  # Keep for backward compatib
 
 __all__ = ["ModelORNOR", "ORNOR"]
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
