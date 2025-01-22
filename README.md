@@ -53,21 +53,23 @@ pip install git+https://github.com/umbibio/nlbayes-python.git
 
 ## Usage
 
-Basic example of running TF inference:
-
 ```python
-import nlbayes
+from nlbayes import ORNOR
 
-# Load or generate your network and evidence
-network = {...}  # Dictionary mapping TFs to their target genes
-evidence = {...}  # Dictionary of differential expression evidence
+# Create and fit the model
+model = ORNOR(network, evidence, n_graphs=5, uniform_prior=False)
+model.fit(n_samples=2000, gelman_rubin=1.1, burnin=True)
 
-# Create and run the model
-model = nlbayes.ModelORNOR(network, evidence)
-model.sample_posterior(N=2000, gr_level=1.1, burnin=True)
-
-# Get results as a DataFrame
-results = model.inference_posterior_df()
+# Get inference results
+results = model.get_results()
+print(results)
 ```
+
+### Input Data Format
+
+The input data for the `ORNOR` class should be formatted as follows:
+
+- `network`: A dictionary where keys are TF IDs and values are dictionaries mapping target gene names to regulation modes (-1 for repression, 1 for activation)
+- `evidence`: A dictionary mapping gene names to expression states (-1 for down-regulated, 1 for up-regulated)
 
 For more detailed examples, check the example notebooks and scripts in the `nlbayes/examples` directory.
