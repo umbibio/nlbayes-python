@@ -27,8 +27,7 @@ ext_modules = [
         include_dirs=["core/include"],
         libraries=["gsl", "gslcblas", "m"],
         language="c++",
-        extra_compile_args=["-fopenmp"],
-        extra_link_args=["-lgomp"],
+        extra_compile_args=["-std=c++17"],  # Updated to C++17
         depends=["core/include/*.h"],
     )
 ]
